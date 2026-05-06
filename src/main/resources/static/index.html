@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Employee Management</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="title-wrap">
+        <h1>Employee Management</h1>
+        <p class="subtitle">Web UI powered by REST API at <code>/api/v1/employees</code></p>
+      </div>
+      <div class="badge" title="API + Database connected">
+        <span class="dot"></span>
+        Running on <code id="baseUrl"></code>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="pill" id="modePill">Create</div>
+            <div class="hint" id="editHint">Fill the form and click Create.</div>
+          </div>
+          <button class="btn-ghost" id="resetBtn" type="button">Reset</button>
+        </div>
+
+        <div class="card-body">
+        <form id="employeeForm">
+          <input type="hidden" id="id" />
+
+          <div class="row">
+            <div>
+              <label for="firstName">First name</label>
+              <input id="firstName" placeholder="e.g. John" required minlength="1" />
+            </div>
+            <div>
+              <label for="lastName">Last name</label>
+              <input id="lastName" placeholder="e.g. Doe" required minlength="1" />
+            </div>
+          </div>
+
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="name@company.com" required />
+
+          <label for="department">Department</label>
+          <input id="department" placeholder="Engineering / HR / Finance" required />
+
+          <label for="salary">Salary</label>
+          <input id="salary" type="number" min="0" step="0.01" required />
+
+          <div class="actions">
+            <button class="btn-primary" id="submitBtn" type="submit">Create</button>
+            <button class="btn-ghost" id="cancelEditBtn" type="button" style="display:none;">Cancel Edit</button>
+          </div>
+        </form>
+
+        <p class="status" id="status"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <strong>Employees</strong>
+          <div class="actions" style="margin:0;">
+            <button class="btn-ghost" id="refreshBtn" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Department</th>
+                <th>Salary</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const apiBase = '/api/v1/employees';
+
+    const el = (id) => document.getElementById(id);
+    const statusEl = el('status');
+    const tbody = el('tbody');
+
+    const modePill = el('modePill');
+    const editHint = el('editHint');
+    const submitBtn = el('submitBtn');
+    const cancelEditBtn = el('cancelEditBtn');
+    el('baseUrl').textContent = window.location.origin;
+
+    function setStatus(msg, isError = false) {
+      statusEl.textContent = msg || '';
+      statusEl.className = 'status' + (isError ? ' error' : '');
+    }
+
+    function formData() {
+      return {
+        firstName: el('firstName').value.trim(),
+        lastName: el('lastName').value.trim(),
+        email: el('email').value.trim(),
+        department: el('department').value.trim(),
+        salary: Number(el('salary').value),
+      };
+    }
+
+    function setForm(employee) {
+      el('id').value = employee?.id ?? '';
+      el('firstName').value = employee?.firstName ?? '';
+      el('lastName').value = employee?.lastName ?? '';
+      el('email').value = employee?.email ?? '';
+      el('department').value = employee?.department ?? '';
+      el('salary').value = employee?.salary ?? '';
+    }
+
+    function setMode(mode) {
+      if (mode === 'edit') {
+        modePill.textContent = 'Edit';
+        editHint.textContent = 'Update the fields and click Save.';
+        submitBtn.textContent = 'Save';
+        cancelEditBtn.style.display = '';
+      } else {
+        modePill.textContent = 'Create';
+        editHint.textContent = 'Fill the form and click Create.';
+        submitBtn.textContent = 'Create';
+        cancelEditBtn.style.display = 'none';
+      }
+    }
+
+    async function fetchJson(url, options) {
+      const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+      if (!res.ok) {
+        let body = null;
+        try { body = await res.json(); } catch (_) {}
+        const message = body?.message || `Request failed (${res.status})`;
+        const fieldErrors = body?.fieldErrors ? JSON.stringify(body.fieldErrors) : '';
+        throw new Error(fieldErrors ? `${message}: ${fieldErrors}` : message);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    async function loadEmployees() {
+      setStatus('');
+      tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+      try {
+        const employees = await fetchJson(apiBase);
+        if (!employees.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">No employees yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = employees.map(e => `
+          <tr>
+            <td>${e.id}</td>
+            <td>${escapeHtml(e.firstName)} ${escapeHtml(e.lastName)}</td>
+            <td>${escapeHtml(e.email)}</td>
+            <td>${escapeHtml(e.department)}</td>
+            <td>${Number(e.salary).toFixed(2)}</td>
+            <td>
+              <div class="cell-actions">
+                <button type="button" class="btn-ghost" data-action="edit" data-id="${e.id}">Edit</button>
+                <button type="button" class="btn-danger" data-action="delete" data-id="${e.id}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">Failed to load employees.</td></tr>';
+        setStatus(err.message, true);
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    el('refreshBtn').addEventListener('click', loadEmployees);
+    el('resetBtn').addEventListener('click', () => { setForm(null); setMode('create'); setStatus(''); });
+    cancelEditBtn.addEventListener('click', () => { setForm(null); setMode('create'); setStatus(''); });
+
+    tbody.addEventListener('click', async (evt) => {
+      const btn = evt.target.closest('button[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      setStatus('');
+      try {
+        if (action === 'edit') {
+          const employee = await fetchJson(`${apiBase}/${id}`);
+          setForm(employee);
+          setMode('edit');
+          return;
+        }
+        if (action === 'delete') {
+          if (!confirm(`Delete employee #${id}?`)) return;
+          await fetchJson(`${apiBase}/${id}`, { method: 'DELETE' });
+          setStatus(`Deleted employee #${id}.`);
+          await loadEmployees();
+        }
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    el('employeeForm').addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      setStatus('');
+      const id = el('id').value;
+      const payload = formData();
+      try {
+        if (id) {
+          await fetchJson(`${apiBase}/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+          setStatus(`Updated employee #${id}.`);
+          setForm(null);
+          setMode('create');
+        } else {
+          const created = await fetchJson(apiBase, { method: 'POST', body: JSON.stringify(payload) });
+          setStatus(`Created employee #${created.id}.`);
+          setForm(null);
+        }
+        await loadEmployees();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    loadEmployees();
+  </script>
+</body>
+</html>
+
