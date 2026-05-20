@@ -83,36 +83,30 @@ pipeline {
         }
 
         stage('Deploy Container') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            docker pull ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
-                            docker rm -f ${CONTAINER_NAME} || true
-                            docker run -d --name ${CONTAINER_NAME} -p ${DEPLOY_PORT}:${APP_PORT} ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
-                        '''
-                    } else {
-                        bat '''
-                            docker pull %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
-                            docker rm -f %CONTAINER_NAME% || echo Container not found
-                            docker run -d --name %CONTAINER_NAME% -p %DEPLOY_PORT%:%APP_PORT% %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
-                        '''
-                    }
-                }
-            }
-        }
-    }
+    steps {
+        script {
+            if (isUnix()) {
+                sh '''
+                    docker stop ${CONTAINER_NAME} || true
+                    docker rm ${CONTAINER_NAME} || true
 
-    post {
-        always {
-            script {
-                if (isUnix()) {
-                    sh 'docker logout || true'
-                } else {
-                    bat 'docker logout'
-                }
+                    docker pull ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
+
+                    docker run -d \
+                    --name ${CONTAINER_NAME} \
+                    -p ${DEPLOY_PORT}:${APP_PORT} \
+                    ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
+                '''
+            } else {
+                bat '''
+                    docker stop %CONTAINER_NAME% || echo Container not running
+                    docker rm %CONTAINER_NAME% || echo Container not found
+
+                    docker pull %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
+
+                    docker run -d --name %CONTAINER_NAME% -p %DEPLOY_PORT%:%APP_PORT% %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
+                '''
             }
         }
     }
 }
-
