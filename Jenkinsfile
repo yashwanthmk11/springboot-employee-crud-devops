@@ -14,6 +14,7 @@ pipeline {
     }
 
     stages {
+
         stage('Clone Repository') {
             steps {
                 checkout scm
@@ -46,25 +47,20 @@ pipeline {
 
         stage('Docker Login') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD')]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                    )
+                ]) {
+
                     script {
                         if (isUnix()) {
                             sh 'echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin'
                         } else {
                             bat 'echo %DOCKERHUB_PASSWORD% | docker login -u %DOCKERHUB_USERNAME% --password-stdin'
                         }
-                    }
-                }
-            }
-        }
-
-        stage('Docker Tag') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh 'docker tag ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG} ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}'
-                    } else {
-                        bat 'docker tag %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG% %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%'
                     }
                 }
             }
@@ -82,30 +78,48 @@ pipeline {
             }
         }
 
-       stage('Deploy Container') {
-    steps {
-        script {
-            if (isUnix()) {
-                sh '''
-                    docker stop ${CONTAINER_NAME} || true
-                    docker rm ${CONTAINER_NAME} || true
+        stage('Deploy Container') {
+            steps {
+                script {
+                    if (isUnix()) {
 
-                    docker pull ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
+                        sh '''
+                            docker stop ${CONTAINER_NAME} || true
+                            docker rm ${CONTAINER_NAME} || true
 
-                    docker run -d \
-                    --name ${CONTAINER_NAME} \
-                    -p ${DEPLOY_PORT}:${APP_PORT} \
-                    ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
-                '''
-            } else {
-                bat '''
-                    docker stop %CONTAINER_NAME% || echo Container not running
-                    docker rm %CONTAINER_NAME% || echo Container not found
+                            docker pull ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
 
-                    docker pull %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
+                            docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            -p ${DEPLOY_PORT}:${APP_PORT} \
+                            ${DOCKERHUB_IMAGE}:${DOCKERHUB_TAG}
+                        '''
 
-                    docker run -d --name %CONTAINER_NAME% -p %DEPLOY_PORT%:%APP_PORT% %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
-                '''
+                    } else {
+
+                        bat '''
+                            docker stop %CONTAINER_NAME% || echo Container not running
+                            docker rm %CONTAINER_NAME% || echo Container not found
+
+                            docker pull %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
+
+                            docker run -d --name %CONTAINER_NAME% -p %DEPLOY_PORT%:%APP_PORT% %DOCKERHUB_IMAGE%:%DOCKERHUB_TAG%
+                        '''
+
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                if (isUnix()) {
+                    sh 'docker logout || true'
+                } else {
+                    bat 'docker logout'
+                }
             }
         }
     }
