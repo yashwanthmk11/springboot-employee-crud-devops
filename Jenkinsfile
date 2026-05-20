@@ -82,7 +82,7 @@ pipeline {
             }
         }
 
-        stage('Deploy Container') {
+       stage('Deploy Container') {
     steps {
         script {
             if (isUnix()) {
